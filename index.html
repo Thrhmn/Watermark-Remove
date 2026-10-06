@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Penghapus Watermark PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3f5f7;
+    --panel: #ffffff;
+    --ink: #12212f;
+    --muted: #55646f;
+    --blue: #1f4e79;
+    --blue-dark: #163a5a;
+    --line: #b9c4ce;
+    --ok: #1e7b4f;
+    --err: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 1rem; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 1.0625rem/1.55 "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 40rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  h1 {
+    font: 800 clamp(2rem, 7vw, 3rem)/1.05 "Bricolage Grotesque", "Source Sans 3", system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.75rem;
+  }
+  .lead { color: var(--muted); margin: 0 0 2rem; max-width: 34rem; }
+
+  label.field { display: block; font-weight: 600; margin: 0 0 0.35rem; }
+  .hint { color: var(--muted); font-size: 0.95rem; margin: 0.35rem 0 0; }
+  input[type="text"] {
+    width: 100%;
+    font: inherit;
+    padding: 0.7rem 0.8rem;
+    border: 1.5px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--ink);
+  }
+  input[type="text"]:focus-visible,
+  .drop:focus-within,
+  button:focus-visible { outline: 3px solid #6aa3d6; outline-offset: 2px; }
+
+  .drop {
+    display: block;
+    margin: 1.75rem 0 1.25rem;
+    padding: 2rem 1rem;
+    text-align: center;
+    background: var(--panel);
+    border: 2px dashed var(--blue);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .drop.over { background: #e6eef6; }
+  .drop strong { display: block; font-size: 1.15rem; }
+  .drop span { color: var(--muted); font-size: 0.95rem; }
+  .drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+  ul.files { list-style: none; margin: 0 0 1.25rem; padding: 0; }
+  ul.files li {
+    display: flex; justify-content: space-between; gap: 1rem; align-items: baseline;
+    padding: 0.55rem 0; border-bottom: 1px solid var(--line);
+  }
+  ul.files .name { overflow-wrap: anywhere; }
+  ul.files .state { white-space: nowrap; font-size: 0.95rem; color: var(--muted); }
+  ul.files .state.ok { color: var(--ok); }
+  ul.files .state.err { color: var(--err); }
+  ul.files a { color: var(--blue); font-weight: 600; }
+
+  .check { display: flex; gap: 0.5rem; align-items: center; margin: 0 0 1.5rem; }
+  .check input { width: 1.1rem; height: 1.1rem; }
+
+  button.run {
+    font: 600 1.05rem "Source Sans 3", system-ui, sans-serif;
+    padding: 0.8rem 1.5rem;
+    background: var(--blue);
+    color: #fff;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button.run:hover:not(:disabled) { background: var(--blue-dark); }
+  button.run:disabled { background: #8a9aa8; cursor: not-allowed; }
+
+  #status { margin: 1.25rem 0 0; min-height: 1.5rem; color: var(--muted); }
+  #status.err { color: var(--err); }
+
+  .note {
+    margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 0.95rem;
+  }
+  .note p { margin: 0 0 0.6rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Penghapus Watermark PDF</h1>
+  <p class="lead">Hapus watermark teks dari file PDF langsung di browser. File tidak diunggah ke server mana pun.</p>
+
+  <label class="field" for="wm">Teks watermark</label>
+  <input type="text" id="wm" autocomplete="off" placeholder="Contoh: CONFIDENTIAL">
+  <p class="hint">Ketik satu baris atau sebagian teks watermark persis seperti yang tampil di PDF.</p>
+
+  <label class="drop" id="drop">
+    <strong>Pilih file PDF</strong>
+    <span>atau seret ke sini (boleh lebih dari satu)</span>
+    <input type="file" id="file" accept="application/pdf,.pdf" multiple>
+  </label>
+
+  <ul class="files" id="list"></ul>
+
+  <div class="check">
+    <input type="checkbox" id="case">
+    <label for="case">Bedakan huruf besar dan kecil</label>
+  </div>
+
+  <button class="run" id="run" disabled>Hapus watermark</button>
+  <p id="status" role="status" aria-live="polite">Memuat mesin Python (sekitar 10 detik pertama kali)...</p>
+
+  <div class="note">
+    <p>Hanya watermark berupa teks yang bisa dihapus. Watermark berupa gambar, atau teks yang sudah diubah menjadi gambar (hasil scan), tidak terdeteksi.</p>
+    <p>Hasil unduhan memakai nama file asli ditambah "-tanpa-watermark".</p>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"></script>
+<script>
+const PY_CODE = `
+import io
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import ContentStream, TextStringObject
+
+def remove_watermark(data, wm, case_sensitive):
+    needle = wm if case_sensitive else wm.lower()
+
+    def hit(s):
+        return needle in (s if case_sensitive else s.lower())
+
+    reader = PdfReader(io.BytesIO(bytes(data.to_py())))
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception:
+            raise ValueError("PDF dikunci dengan password")
+
+    writer = PdfWriter()
+    removed = 0
+    for src_page in reader.pages:
+        page = writer.add_page(src_page)
+        contents = page.get_contents()
+        if contents is None:
+            continue
+        content = ContentStream(contents, writer)
+        for operands, operator in content.operations:
+            if not operands:
+                continue
+            if operator == b"Tj":
+                t = operands[0]
+                if isinstance(t, TextStringObject) and hit(str(t)):
+                    operands[0] = TextStringObject("")
+                    removed += 1
+            elif operator == b"TJ":
+                arr = operands[0]
+                joined = "".join(str(x) for x in arr if isinstance(x, TextStringObject))
+                if joined and hit(joined):
+                    for i, x in enumerate(arr):
+                        if isinstance(x, TextStringObject):
+                            arr[i] = TextStringObject("")
+                    removed += 1
+        page.replace_contents(content)
+
+    out = io.BytesIO()
+    writer.write(out)
+    return [out.getvalue(), removed]
+`;
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status");
+const runBtn = $("run");
+let pyodide = null;
+let files = [];
+
+function setStatus(msg, isErr = false) {
+  statusEl.textContent = msg;
+  statusEl.className = isErr ? "err" : "";
+}
+
+async function init() {
+  try {
+    pyodide = await loadPyodide();
+    await pyodide.loadPackage("micropip");
+    await pyodide.pyimport("micropip").install("pypdf");
+    pyodide.runPython(PY_CODE);
+    setStatus("Siap. Isi teks watermark dan pilih file PDF.");
+    updateButton();
+  } catch (e) {
+    console.error(e);
+    setStatus("Gagal memuat mesin Python. Periksa koneksi internet lalu muat ulang halaman.", true);
+  }
+}
+
+function updateButton() {
+  runBtn.disabled = !(pyodide && files.length && $("wm").value.trim());
+}
+
+function renderList() {
+  const ul = $("list");
+  ul.innerHTML = "";
+  files.forEach((f, i) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="name"></span><span class="state" id="st' + i + '">Menunggu</span>';
+    li.querySelector(".name").textContent = f.name;
+    ul.appendChild(li);
+  });
+}
+
+function addFiles(list) {
+  files = Array.from(list).filter((f) => /\.pdf$/i.test(f.name));
+  renderList();
+  updateButton();
+}
+
+$("file").addEventListener("change", (e) => addFiles(e.target.files));
+$("wm").addEventListener("input", updateButton);
+
+const drop = $("drop");
+["dragenter", "dragover"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+
+runBtn.addEventListener("click", async () => {
+  const wm = $("wm").value.trim();
+  const cs = $("case").checked;
+  const fn = pyodide.globals.get("remove_watermark");
+  runBtn.disabled = true;
+  setStatus("Memproses...");
+
+  for (let i = 0; i < files.length; i++) {
+    const st = $("st" + i);
+    st.className = "state";
+    st.textContent = "Memproses...";
+    try {
+      const buf = new Uint8Array(await files[i].arrayBuffer());
+      const proxy = fn(buf, wm, cs);
+      const [bytes, count] = proxy.toJs();
+      proxy.destroy();
+
+      if (count === 0) {
+        st.className = "state err";
+        st.textContent = "Teks tidak ditemukan";
+        continue;
+      }
+      const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const outName = files[i].name.replace(/\.pdf$/i, "") + "-tanpa-watermark.pdf";
+      st.className = "state ok";
+      st.innerHTML = count + ' bagian dihapus · <a download="">Unduh</a>';
+      const a = st.querySelector("a");
+      a.href = url;
+      a.download = outName;
+    } catch (e) {
+      console.error(e);
+      st.className = "state err";
+      st.textContent = /password/i.test(String(e)) ? "PDF berpassword" : "Gagal diproses";
+    }
+  }
+  fn.destroy();
+  setStatus("Selesai. Klik Unduh di samping tiap file.");
+  updateButton();
+});
+
+init();
+</script>
+</body>
+</html>
