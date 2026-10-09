@@ -90,6 +90,10 @@
   }
   button.run:hover:not(:disabled) { background: var(--blue-dark); }
   button.run:disabled { background: #8a9aa8; cursor: not-allowed; }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+  button.alt { background: var(--panel); color: var(--blue); border: 1.5px solid var(--blue); }
+  button.alt:hover:not(:disabled) { background: #e6eef6; }
+  button.alt:disabled { background: var(--panel); color: #8a9aa8; border-color: #8a9aa8; }
 
   #status { margin: 1.25rem 0 0; min-height: 1.5rem; color: var(--muted); }
   #status.err { color: var(--err); }
@@ -123,7 +127,10 @@
     <label for="case">Bedakan huruf besar dan kecil</label>
   </div>
 
-  <button class="run" id="run" disabled>Hapus watermark</button>
+  <div class="actions">
+    <button class="run" id="run" disabled>Hapus watermark</button>
+    <button class="run alt" id="dlAll" hidden>Unduh semua (ZIP)</button>
+  </div>
   <p id="status" role="status" aria-live="polite">Memuat mesin Python (sekitar 10 detik pertama kali)...</p>
 
   <div class="note">
@@ -132,6 +139,7 @@
   </div>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"></script>
 <script>
 const PY_CODE = `
@@ -188,6 +196,7 @@ const statusEl = $("status");
 const runBtn = $("run");
 let pyodide = null;
 let files = [];
+let results = [];
 
 function setStatus(msg, isErr = false) {
   statusEl.textContent = msg;
@@ -244,6 +253,8 @@ runBtn.addEventListener("click", async () => {
   const cs = $("case").checked;
   const fn = pyodide.globals.get("remove_watermark");
   runBtn.disabled = true;
+  results = [];
+  $("dlAll").hidden = true;
   setStatus("Memproses...");
 
   for (let i = 0; i < files.length; i++) {
@@ -264,6 +275,7 @@ runBtn.addEventListener("click", async () => {
       const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const outName = files[i].name.replace(/\.pdf$/i, "") + "-tanpa-watermark.pdf";
+      results.push({ name: outName, blob });
       st.className = "state ok";
       st.innerHTML = count + ' bagian dihapus · <a download="">Unduh</a>';
       const a = st.querySelector("a");
@@ -276,8 +288,53 @@ runBtn.addEventListener("click", async () => {
     }
   }
   fn.destroy();
-  setStatus("Selesai. Klik Unduh di samping tiap file.");
+  if (results.length > 1) {
+    const b = $("dlAll");
+    b.textContent = "Unduh semua (ZIP, " + results.length + " file)";
+    b.disabled = false;
+    b.hidden = false;
+    setStatus("Selesai. Klik Unduh semua, atau Unduh di samping tiap file.");
+  } else {
+    setStatus("Selesai. Klik Unduh di samping file.");
+  }
   updateButton();
+});
+
+$("dlAll").addEventListener("click", async () => {
+  if (typeof JSZip === "undefined") {
+    setStatus("Library ZIP gagal dimuat. Muat ulang halaman.", true);
+    return;
+  }
+  const btn = $("dlAll");
+  btn.disabled = true;
+  setStatus("Membuat file ZIP...");
+  try {
+    const zip = new JSZip();
+    const used = new Set();
+    for (const r of results) {
+      let name = r.name;
+      let n = 2;
+      while (used.has(name.toLowerCase())) {
+        name = r.name.replace(/\.pdf$/i, "") + " (" + n++ + ").pdf";
+      }
+      used.add(name.toLowerCase());
+      zip.file(name, r.blob);
+    }
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pdf-tanpa-watermark.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setStatus("ZIP siap diunduh.");
+  } catch (e) {
+    console.error(e);
+    setStatus("Gagal membuat ZIP.", true);
+  }
+  btn.disabled = false;
 });
 
 init();
